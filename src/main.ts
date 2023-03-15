@@ -30,6 +30,8 @@ const DEFAULT_SETTINGS: ContextualKeysSettings = {
  */
 export default class ContectualKeys extends Plugin {
 	settings: ContextualKeysSettings;
+	static keywordGenerator: keywordGenerator;
+
 	async onload() {
 		await this.loadSettings();
 		const ribbonIconEl = this.addRibbonIcon(
@@ -56,15 +58,15 @@ export default class ContectualKeys extends Plugin {
 					// If checking is false, then we want to actually perform the operation.
 					if (!checking) {
 						// constuct a keywordGenerator
-						const keywordsGenerator = new keywordGenerator(
-							this,
-							this.app,
-							this.settings
-						);
+						keywordGenerator.plugin = this;
+						keywordGenerator.debug = this.settings.debug;
+						keywordGenerator.app = this.app;
+						keywordGenerator.apiKey = this.settings.apiKey;
 						// add the keywords to the frontmatter with keywordGenerator class
 						keywordGenerator.generateAndInsertKeywords(
 							markdownView.file
 						);
+
 					}
 					return true;
 				}

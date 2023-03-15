@@ -4,7 +4,6 @@ import { Configuration, OpenAIApi } from 'openai';
 import ContextualKeysLogger from './logger';
 import ContectualKeysSettings from './main';
 
-
 /**
  *  Keyword Generator Class for the contextual keys plugin 
  */
@@ -13,8 +12,9 @@ export default class keywordGenerator{
 	static debug: boolean;
 	static app: App;
 	static settings: ContectualKeysSettings;
+	static apiKey: string;
 
-	constructor(plugin: ContectualKeys, app: App, settings: ContectualKeysSettings) {
+	constructor (plugin: ContectualKeys, app: App, settings: ContectualKeysSettings) {
 		keywordGenerator.plugin = plugin;
 		keywordGenerator.debug = plugin.settings.debug;
 		keywordGenerator.app = app;
@@ -26,18 +26,21 @@ export default class keywordGenerator{
 	 * @param file the file to generate keywords for 
 	 */
 	static async generateAndInsertKeywords(file: TFile) {
-		const fileContent = app.vault.read(file);
+		const fileContent = await app.vault.read(file);
 
-		const generatedKeywords = this.generate(fileContent);
+		const generatedKeywords = await this.generate(fileContent);
+
+		ContextualKeysLogger.log("keywordGenerator.generateAndInsert Generated Keywords: " + generatedKeywords);
 
 		const olderKeywords: string[] = await this.getKeywords(fileContent);
-		const newerKeywords: string[] = await keywordGenerator.ExtractGeneratedKeywords(await generatedKeywords);
+		const newerKeywords: string[] = await keywordGenerator.ExtractGeneratedKeywords(generatedKeywords);
 
-		ContextualKeysLogger.log("Old Keywords: " + olderKeywords);
-		ContextualKeysLogger.log("New Keywords: " + newerKeywords);
+		ContextualKeysLogger.log("keywordGenerator.generateAndInsert Old Keywords: " + olderKeywords);
+		ContextualKeysLogger.log("keywordGenerator.generateAndInsert New Keywords: " + newerKeywords);
 
 		const combinedKeywords = this.combineKeywords(olderKeywords, newerKeywords);
 		this.insertKeywords(file, combinedKeywords);	
+		ContextualKeysLogger.log("keywordGenerator.generateAndInsert Combined Keywords: " + combinedKeywords);
 	}
 	/**
 	 * Inserts the keywords into the file frontmatter 
@@ -49,12 +52,23 @@ export default class keywordGenerator{
 		// get before and after keywords: in the frontmatter 
 		const fileContent = this.plugin.app.vault.read(file);
 		const before =  (await fileContent).split('keywords:')[0];
-		const after =  (await fileContent).split('keywords:')[1].split('\n')[1];
+		const after =  (await fileContent).split('keywords:')[1];
 		// convert the keywords array to a string comma separated
-		const keywordsString = keywords.join(', ');
+		let keywordsString = keywords.join(', ');
+		// add a , to the end of the string if it doesn't already have one
+		if(keywordsString[keywordsString.length - 1] !== ','){
+			keywordsString += ',';
+		}
+		// if the keywordsString contains "keywords: " remove it
+		if(keywordsString.includes('keywords: ')){
+			keywordsString = keywordsString.replace('keywords: ', '');
+		}
+		// if the keywordsString contains "Keywords:" remove it
+		if(keywordsString.includes('Keywords:')){
+			keywordsString = keywordsString.replace('Keywords:', '');
+		}
 		// write the new file with  before + keywords: combinedKeywords + after
 		this.plugin.app.vault.modify(file, before + 'keywords: ' + keywordsString + after);
-
 	}
 
 	/**
@@ -81,33 +95,39 @@ export default class keywordGenerator{
 	 * @returns A promise that resolves to an array of strings containing the keywords
 	 * @param fileContent the content of the file to generate keywords from
 	 */
-	static async generate(fileContent: Promise<string>): Promise<string> {
+	static async generate(fileContent: string): Promise<string> {
 		// Add the prompt "Write a list of keywords in markdown formatting for the following text:"
-		const prompt = "Write a list of keywords in markdown formatting for the following text:\n" + await fileContent;
+		const prompt = "Write a list of keywords in markdown formatting for the following text repeat keywords:\n" + fileContent;
+
+
 
 		const config = new Configuration({
-			apiKey: this.settings.apiKey,
+			apiKey: this.apiKey,
 		});
 
 		const openai = new OpenAIApi(config);
 
+		// openai.createChatCompletion = async (request: CreateChatCompletionRequest) => {
 		const completion = await openai.createCompletion({
-			model: 'gpt3.5-turbo',
+			model: 'text-davinci-003',
 			prompt: prompt,
 		});
 
-		ContextualKeysLogger.log("Completion: " + completion.data.choices[0].text);
+		ContextualKeysLogger.log("Completion: " + await completion.data.choices[0].text);
 
-		if(completion.data.choices[0].text == undefined){
+		if(completion.data.choices[0].text === undefined){
 			return "";
 		}
-			return completion.data.choices[0].text;
+		return completion.data.choices[0].text;
 	}
 	
 	static async ExtractGeneratedKeywords(text: string): Promise<string[]> {
 		let keywords: string[] = [];
 		// for each string separated by a new line
-		for(const line of text.split('\n')){
+		for(let line of text.split('\n')){
+			line = line.toLowerCase();
+			
+			line = line.replace(/[*-]/g, '');
 			if(line.startsWith('keywords:')){
 				if(line.split('\n').length >= 2){
 					keywords = this.parseVerticalKeywords(line);
@@ -126,7 +146,7 @@ export default class keywordGenerator{
 	 * @param file the file to get the keywords from
 	 * @returns string[] containing the keywords
 	 */
-	static async getKeywords(fileContent: Promise<string>): Promise<string[]> {
+	static async getKeywords(fileContent: string): Promise<string[]> {
 		let keywords: string[] = [];
 
 		// adjusting for vertical and horizontal keywords formats, return the keywords as an array of strings
