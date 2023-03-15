@@ -1,0 +1,1 @@
+Example Vault for the Contextual Keys Plugin for Obsidian 
