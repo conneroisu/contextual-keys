@@ -9,7 +9,7 @@ import {
 import keywordGenerator from './keywordGenerator';
 
 /**
- * Settings for the contextual keys plugin 
+ * Settings for the contextual keys plugin. 
  */
 interface ContextualKeysSettings {
 	apiKey: string;
@@ -17,7 +17,7 @@ interface ContextualKeysSettings {
 }
 
 /**
- * Default Settings for the contextual keys plugin 
+ * Default Settings for the contextual keys plugin.
  */
 const DEFAULT_SETTINGS: ContextualKeysSettings = {
 	apiKey: "default api key",

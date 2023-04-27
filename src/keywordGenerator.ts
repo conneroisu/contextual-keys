@@ -5,6 +5,10 @@ import ContextualKeysLogger from './logger';
 import ContectualKeysSettings from './main';
 
 /**
+ * @author Conner Ohnesorge
+ */
+
+/**
  *  Keyword Generator Class for the contextual keys plugin 
  */
 export default class keywordGenerator{
@@ -21,16 +25,19 @@ export default class keywordGenerator{
 		keywordGenerator.settings = settings;
 	}
 
+	static async generateKeywords(file: TFile, resultinggeneratedkeywords: string){
+		resultinggeneratedkeywords = await this.generate(await app.vault.read(file)); 
+		ContextualKeysLogger.log("keywordGenerator.generateAndInsert Generated Keywords: " + resultinggeneratedkeywords);
+	}
 	/**
 	 * Method to generate keywords for a file and insert them into the frontmatter 
 	 * @param file the file to generate keywords for 
 	 */
 	static async generateAndInsertKeywords(file: TFile) {
 		const fileContent = await app.vault.read(file);
+		const generatedKeywords = "";
 
-		const generatedKeywords = await this.generate(fileContent);
-
-		ContextualKeysLogger.log("keywordGenerator.generateAndInsert Generated Keywords: " + generatedKeywords);
+		keywordGenerator.generateKeywords(file, generatedKeywords);
 
 		const olderKeywords: string[] = await this.getKeywords(fileContent);
 		const newerKeywords: string[] = await keywordGenerator.ExtractGeneratedKeywords(generatedKeywords);
@@ -51,8 +58,16 @@ export default class keywordGenerator{
 		// replace the file content with the new content
 		// get before and after keywords: in the frontmatter 
 		const fileContent = this.plugin.app.vault.read(file);
-		const before =  (await fileContent).split('keywords:')[0];
-		const after =  (await fileContent).split('keywords:')[1];
+		let before =  (await fileContent).split('keywords:')[0];
+		let after =  (await fileContent).split('keywords:')[1];
+		// set before to new line inside of frontmatter if the file doesn't have keywords
+		// if there are no keywords in the file then the before will be ---\r md file content
+		if(this.areKeywordsInFrontmatter(await fileContent) === false){
+			before = before + '---\r' + 'keywords: ';
+			// after is the second line
+			after = (await after).split('\r')[1];
+		}
+
 		// convert the keywords array to a string comma separated
 		let keywordsString = keywords.join(', ');
 		// add a , to the end of the string if it doesn't already have one
@@ -67,9 +82,30 @@ export default class keywordGenerator{
 		if(keywordsString.includes('Keywords:')){
 			keywordsString = keywordsString.replace('Keywords:', '');
 		}
+		// if the keywordsString has a preceding comma remove it
+		if(keywordsString[0] === ','){
+			keywordsString = keywordsString.substring(1);
+		}
+
 		// write the new file with  before + keywords: combinedKeywords + after
 		this.plugin.app.vault.modify(file, before + 'keywords: ' + keywordsString + after);
 	}
+
+	static areKeywordsInFrontmatter(fileContent: string): boolean {
+		// if the file content inside of the frontmatter contains keywords: return true
+		// if keywords are within --- and --- return true
+		let inside = false;
+		for(const line of fileContent.split('\n')){
+			if(line.includes('---')){
+				inside = !inside;
+			}
+			if(line.includes('keywords:')){
+				return true;
+			}
+		}
+		return false;
+	}
+
 
 	/**
 	 * Combines the old keywords with the new keywords
